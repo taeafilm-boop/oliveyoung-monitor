@@ -2,11 +2,11 @@ name: 올리브영 베스트 TOP10
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # 매일 KST 09:00 자동 실행
-  workflow_dispatch:        # 수동 실행 버튼도 활성화
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   #
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   crawl:
@@ -33,8 +33,9 @@ jobs:
         run: |
           for i in 1 2 3; do
             python oliveyoung_crawler.py && break
-            echo "재시도 $i..."
+            echo "재시도 $i/3..."
             sleep 5
           done
         env:
+          CREDENTIALS_FILE: credentials.json
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
