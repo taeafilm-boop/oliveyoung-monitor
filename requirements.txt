@@ -1,6 +1,8 @@
 selenium
 gspread
 google-auth
+google-auth-oauthlib
+google-auth-httplib2
 webdriver-manager
 requests
 beautifulsoup4
