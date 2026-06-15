@@ -5,6 +5,9 @@ on:
     - cron: '0 0 * * *'   # 매일 KST 09:00 자동 실행
   workflow_dispatch:        # 수동 실행 버튼도 활성화
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   #
+
 jobs:
   crawl:
     runs-on: ubuntu-latest
