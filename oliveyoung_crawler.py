@@ -3,35 +3,18 @@
 # ║ oliveyoung_crawler.py                                   ║
 # ╚══════════════════════════════════════════════════════════╝
 
+import re, datetime, os
+import requests
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-import time, re, datetime, os   # ← os 있는지 확인
+import time
 import gspread
 from google.oauth2.service_account import Credentials
 
-import requests
-from bs4 import BeautifulSoup
-
-headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Referer": "https://www.oliveyoung.co.kr",
-}
-
-url = (
-    "https://www.oliveyoung.co.kr/store/main/getBestList.do"
-    "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
-)
-
-res = requests.get(url, headers=headers)
-soup = BeautifulSoup(res.text, "html.parser")
-cards = soup.select("ul.best_list > li")
-if not cards:
-    cards = soup.select("ul.cate_prd_list > li")
 
 # ══════════════════════════════════════════════════════
 # ▶ 설정값 — 로컬 / GitHub Actions 자동 분기
-#   로컬 실행 시  : 아래 r"..." 경로를 그대로 사용
-#   GitHub Actions: Secrets 환경변수를 자동으로 사용
 # ══════════════════════════════════════════════════════
 CREDENTIALS_FILE = os.environ.get(
     "CREDENTIALS_FILE",
@@ -41,8 +24,9 @@ SPREADSHEET_ID = os.environ.get(
     "SPREADSHEET_ID",
     "1nmLGooCid37AjWGglNVLIosG9Kxr8reTuAhAtyu7Jvw"
 )
-WORKSHEET_NAME = "베스트TOP10"
-EXCLUDE_KEYWORDS = ["칩","과자","음료","커피","쿠키","초코","캔디","젤리","껌","사탕"]
+WORKSHEET_NAME   = "베스트TOP10"
+EXCLUDE_KEYWORDS = ["칩", "과자", "음료", "커피", "쿠키", "초코", "캔디", "젤리", "껌", "사탕"]
+
 
 # ══════════════════════════════════════════════════════
 # ▶ 유틸 함수
@@ -54,108 +38,115 @@ def is_beauty(name):
     return True
 
 
-def txt(el, sel):
-    try:
-        return el.find_element(By.CSS_SELECTOR, sel).text.strip()
-    except:
-        return ""
+# ══════════════════════════════════════════════════════
+# ▶ 공통 변수
+# ══════════════════════════════════════════════════════
+data = []
+now  = datetime.datetime.now()
 
-
-def atr(el, sel, attr):
-    try:
-        return el.find_element(By.CSS_SELECTOR, sel).get_attribute(attr)
-    except:
-        return ""
+REQ_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Referer": "https://www.oliveyoung.co.kr",
+}
+BEST_URL = (
+    "https://www.oliveyoung.co.kr/store/main/getBestList.do"
+    "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
+)
 
 
 # ══════════════════════════════════════════════════════
-# ▶ Chrome 옵션
+# ▶ STEP 1: 랭킹 페이지 — requests 방식으로 기본 정보 수집
 # ══════════════════════════════════════════════════════
+print("=" * 58)
+print("  STEP 1. 올리브영 전체 베스트 TOP10 수집 중...")
+print("=" * 58)
+
+res  = requests.get(BEST_URL, headers=REQ_HEADERS, timeout=15)
+soup = BeautifulSoup(res.text, "html.parser")
+cards = soup.select("ul.best_list > li")
+if not cards:
+    cards = soup.select("ul.cate_prd_list > li")
+
+rank = 1
+for card in cards:
+    if rank > 10:
+        break
+
+    brand_el = card.select_one(".tx_brand")
+    name_el  = card.select_one(".tx_name")
+    brand = brand_el.text.strip() if brand_el else ""
+    name  = name_el.text.strip() if name_el else ""
+
+    if not name or not is_beauty(name):
+        print(f"  → 제외: {name[:20]}")
+        continue
+
+    org_el = card.select_one(".tx_org .tx_num")
+    cur_el = card.select_one(".tx_cur .tx_num")
+    original = re.sub(r"[^\d]", "", org_el.text if org_el else "")
+    discount = re.sub(r"[^\d]", "", cur_el.text if cur_el else "")
+
+    if original and discount and int(original) > 0:
+        rate_str = f"{round((1 - int(discount)/int(original)) * 100)}%"
+    else:
+        rate_str = ""
+
+    card_text = card.text
+    promo_parts = []
+    if "1+1" in card_text:
+        promo_parts.append("1+1")
+    if "2+1" in card_text:
+        promo_parts.append("2+1")
+    if "증정" in card_text:
+        promo_parts.append("🎁")
+    if "오늘드림" in card_text:
+        promo_parts.append("🚀")
+    if "쿠폰" in card_text:
+        promo_parts.append("🎟️")
+
+    a_tag = card.select_one("a.prd_thumb") or card.select_one("a")
+    detail_url = a_tag["href"] if a_tag and a_tag.get("href") else ""
+    if detail_url and detail_url.startswith("/"):
+        detail_url = "https://www.oliveyoung.co.kr" + detail_url
+
+    data.append({
+        "rank": rank,
+        "brand": brand,
+        "name": name,
+        "original": original,
+        "discount": discount,
+        "rate": rate_str,
+        "reviews": "",
+        "promo": " ".join(promo_parts),
+        "url": detail_url,
+    })
+    print(f"  {rank:>2}위 수집 | {brand} {name[:28]}")
+    rank += 1
+
+print(f"\n  → 총 {len(data)}개 기본 정보 수집 완료")
+
+
+# ══════════════════════════════════════════════════════
+# ▶ STEP 2: 상세 페이지 — 셀레니움으로 리뷰수 추출
+# ══════════════════════════════════════════════════════
+print("\n" + "=" * 58)
+print("  STEP 2. 리뷰수 수집 중 (상품별 상세 페이지)")
+print("=" * 58)
+
 options = webdriver.ChromeOptions()
 options.add_argument("--headless=new")
 options.add_argument("--window-size=1920,1080")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
+options.add_argument("--lang=ko-KR,ko;q=0.9")
 options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
 options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
-options.add_argument("--disable-gpu")          
-options.add_argument("--lang=ko-KR,ko;q=0.9")
 
-driver  = webdriver.Chrome(options=options)
-data    = []
-now     = datetime.datetime.now()
+driver = webdriver.Chrome(options=options)
 
-
-# ══════════════════════════════════════════════════════
-# ▶ STEP 1: 랭킹 페이지 — 기본 정보 수집
-# ══════════════════════════════════════════════════════
 try:
-    print("=" * 58)
-    print("  STEP 1. 올리브영 전체 베스트 TOP10 수집 중...")
-    print("=" * 58)
-
-    res  = requests.get(url, headers=headers, timeout=15)
-    soup = BeautifulSoup(res.text, "html.parser")
-    cards = soup.select("ul.best_list > li")
-    if not cards:
-        cards = soup.select("ul.cate_prd_list > li")
-
-    rank = 1
-    for card in cards:
-        if rank > 10:
-            break
-        brand = card.select_one(".tx_brand")
-        name  = card.select_one(".tx_name")
-        brand = brand.text.strip() if brand else ""
-        name  = name.text.strip()  if name  else ""
-
-        if not name or not is_beauty(name):
-            print(f"  → 제외: {name[:20]}")
-            continue
-
-        original = re.sub(r"[^\d]", "", card.select_one(".tx_org .tx_num").text if card.select_one(".tx_org .tx_num") else "")
-        discount = re.sub(r"[^\d]", "", card.select_one(".tx_cur .tx_num").text if card.select_one(".tx_cur .tx_num") else "")
-
-        if original and discount and int(original) > 0:
-            rate_str = f"{round((1 - int(discount)/int(original)) * 100)}%"
-        else:
-            rate_str = ""
-
-        card_text   = card.text
-        promo_parts = []
-        if "1+1"      in card_text: promo_parts.append("1+1")
-        if "2+1"      in card_text: promo_parts.append("2+1")
-        if "증정"     in card_text: promo_parts.append("🎁")
-        if "오늘드림" in card_text: promo_parts.append("🚀")
-        if "쿠폰"     in card_text: promo_parts.append("🎟️")
-
-        a_tag      = card.select_one("a.prd_thumb") or card.select_one("a")
-        detail_url = a_tag["href"] if a_tag and a_tag.get("href") else ""
-
-        data.append({
-            "rank":     rank,
-            "brand":    brand,
-            "name":     name,
-            "original": original,
-            "discount": discount,
-            "rate":     rate_str,
-            "reviews":  "",
-            "promo":    " ".join(promo_parts),
-            "url":      detail_url,
-        })
-        print(f"  {rank:>2}위 수집 | {brand} {name[:28]}")
-        rank += 1
-
-    print(f"\n  → 총 {len(data)}개 기본 정보 수집 완료")
-
-    # ══════════════════════════════════════════════════════
-    # ▶ STEP 2: 상세 페이지 — 리뷰수 추출
-    # ══════════════════════════════════════════════════════
-    print("\n" + "=" * 58)
-    print("  STEP 2. 리뷰수 수집 중 (상품별 상세 페이지)")
-    print("=" * 58)
-
     for row in data:
         if not row["url"]:
             continue
@@ -199,7 +190,6 @@ try:
 
         except Exception as e:
             print(f"  {row['rank']}위 리뷰 수집 오류: {e}")
-
 finally:
     driver.quit()
 
@@ -214,8 +204,8 @@ print("=" * 58)
 
 def get_previous_data(gc):
     try:
-        sh   = gc.open_by_key(SPREADSHEET_ID)
-        ws   = sh.worksheet(WORKSHEET_NAME)
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet(WORKSHEET_NAME)
         rows = ws.get_all_records()
         if not rows:
             return {}
@@ -237,10 +227,10 @@ def get_previous_data(gc):
             if r["수집일자"] == prev_date:
                 key = f"{r['브랜드']}::{r['제품명']}"
                 lookup[key] = {
-                    "rank":     int(r["순위"]) if str(r["순위"]).isdigit() else 0,
+                    "rank": int(r["순위"]) if str(r["순위"]).isdigit() else 0,
                     "discount": int(r["할인가"]) if str(r["할인가"]).isdigit() else 0,
-                    "reviews":  int(r["리뷰수"]) if str(r["리뷰수"]).isdigit() else 0,
-                    "promo":    r["프로모션"],
+                    "reviews": int(r["리뷰수"]) if str(r["리뷰수"]).isdigit() else 0,
+                    "promo": r["프로모션"],
                 }
         return lookup
 
@@ -252,17 +242,17 @@ def get_previous_data(gc):
 def compare_with_previous(data, previous_lookup):
     results = []
     for r in data:
-        key            = f"{r['brand']}::{r['name']}"
-        today_reviews  = int(r["reviews"]) if r["reviews"] else 0
+        key = f"{r['brand']}::{r['name']}"
+        today_reviews = int(r["reviews"]) if r["reviews"] else 0
         today_discount = int(r["discount"]) if r["discount"] else 0
 
         if key in previous_lookup:
-            prev          = previous_lookup[key]
-            rank_change   = prev["rank"] - r["rank"]
-            review_inc    = today_reviews - prev["reviews"]
+            prev = previous_lookup[key]
+            rank_change = prev["rank"] - r["rank"]
+            review_inc = today_reviews - prev["reviews"]
             review_growth = round((review_inc / prev["reviews"]) * 100, 1) if prev["reviews"] > 0 else 0
-            price_change  = today_discount - prev["discount"]
-            is_new        = False
+            price_change = today_discount - prev["discount"]
+            is_new = False
 
             events = []
             if rank_change >= 3:
@@ -286,21 +276,21 @@ def compare_with_previous(data, previous_lookup):
                 events.append(f"📈 가격 {price_change:,}원 인상")
 
         else:
-            rank_change   = None
-            review_inc    = None
+            rank_change = None
+            review_inc = None
             review_growth = None
-            price_change  = None
-            is_new        = True
-            events        = ["🆕 신규 진입"]
+            price_change = None
+            is_new = True
+            events = ["🆕 신규 진입"]
 
         results.append({
             **r,
-            "rank_change":   rank_change,
-            "review_inc":    review_inc,
+            "rank_change": rank_change,
+            "review_inc": review_inc,
             "review_growth": review_growth,
-            "price_change":  price_change,
-            "is_new":        is_new,
-            "events":        " / ".join(events) if events else "-",
+            "price_change": price_change,
+            "is_new": is_new,
+            "events": " / ".join(events) if events else "-",
         })
     return results
 
@@ -318,9 +308,9 @@ try:
         "https://www.googleapis.com/auth/drive",
     ]
     creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
-    gc    = gspread.authorize(creds)
+    gc = gspread.authorize(creds)
 
-    previous_lookup  = get_previous_data(gc)
+    previous_lookup = get_previous_data(gc)
     data_with_change = compare_with_previous(data, previous_lookup)
 
     sh = gc.open_by_key(SPREADSHEET_ID)
@@ -344,13 +334,13 @@ try:
         r["rank_change"] if r["rank_change"] is not None else "NEW",
         r["brand"],
         r["name"],
-        int(r["original"])   if r["original"]   else "",
-        int(r["discount"])   if r["discount"]   else "",
+        int(r["original"]) if r["original"] else "",
+        int(r["discount"]) if r["discount"] else "",
         r["rate"],
-        int(r["reviews"])    if r["reviews"]    else "",
-        r["review_inc"]      if r["review_inc"]      is not None else "",
-        r["review_growth"]   if r["review_growth"]   is not None else "",
-        r["price_change"]    if r["price_change"]    is not None else "",
+        int(r["reviews"]) if r["reviews"] else "",
+        r["review_inc"] if r["review_inc"] is not None else "",
+        r["review_growth"] if r["review_growth"] is not None else "",
+        r["price_change"] if r["price_change"] is not None else "",
         r["promo"],
         r["events"],
         "Y" if r["is_new"] else "N",
