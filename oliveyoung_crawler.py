@@ -3,6 +3,12 @@
 # ║ oliveyoung_crawler.py                                   ║
 # ╚══════════════════════════════════════════════════════════╝
 
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+import time, re, datetime, os   # ← os 있는지 확인
+import gspread
+from google.oauth2.service_account import Credentials
+
 import requests
 from bs4 import BeautifulSoup
 
