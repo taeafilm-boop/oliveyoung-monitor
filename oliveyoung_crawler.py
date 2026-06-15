@@ -95,30 +95,27 @@ try:
     print("  STEP 1. 올리브영 전체 베스트 TOP10 수집 중...")
     print("=" * 58)
 
-    driver.get(
-        "https://www.oliveyoung.co.kr/store/main/getBestList.do"
-        "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
-    )
-    time.sleep(15)
-
-    cards = []
-    for sel in ["ul.best_list > li", "ul.cate_prd_list > li"]:
-        cards = driver.find_elements(By.CSS_SELECTOR, sel)
-        if cards:
-            break
+    res  = requests.get(url, headers=headers, timeout=15)
+    soup = BeautifulSoup(res.text, "html.parser")
+    cards = soup.select("ul.best_list > li")
+    if not cards:
+        cards = soup.select("ul.cate_prd_list > li")
 
     rank = 1
     for card in cards:
         if rank > 10:
             break
-        brand = txt(card, ".tx_brand")
-        name  = txt(card, ".tx_name")
+        brand = card.select_one(".tx_brand")
+        name  = card.select_one(".tx_name")
+        brand = brand.text.strip() if brand else ""
+        name  = name.text.strip()  if name  else ""
+
         if not name or not is_beauty(name):
             print(f"  → 제외: {name[:20]}")
             continue
 
-        original = re.sub(r"[^\d]", "", txt(card, ".tx_org .tx_num"))
-        discount = re.sub(r"[^\d]", "", txt(card, ".tx_cur .tx_num"))
+        original = re.sub(r"[^\d]", "", card.select_one(".tx_org .tx_num").text if card.select_one(".tx_org .tx_num") else "")
+        discount = re.sub(r"[^\d]", "", card.select_one(".tx_cur .tx_num").text if card.select_one(".tx_cur .tx_num") else "")
 
         if original and discount and int(original) > 0:
             rate_str = f"{round((1 - int(discount)/int(original)) * 100)}%"
@@ -133,7 +130,8 @@ try:
         if "오늘드림" in card_text: promo_parts.append("🚀")
         if "쿠폰"     in card_text: promo_parts.append("🎟️")
 
-        detail_url = atr(card, "a.prd_thumb", "href") or atr(card, "a", "href")
+        a_tag      = card.select_one("a.prd_thumb") or card.select_one("a")
+        detail_url = a_tag["href"] if a_tag and a_tag.get("href") else ""
 
         data.append({
             "rank":     rank,
