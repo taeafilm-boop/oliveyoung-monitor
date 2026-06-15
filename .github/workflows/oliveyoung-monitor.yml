@@ -11,7 +11,7 @@ env:
 jobs:
   crawl:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +21,11 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - uses: browser-actions/setup-chrome@latest
-
       - name: 라이브러리 설치
         run: pip install -r requirements.txt
+
+      - name: Playwright 브라우저 설치
+        run: playwright install chromium --with-deps
 
       - name: credentials.json 생성
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
