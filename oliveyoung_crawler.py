@@ -3,11 +3,24 @@
 # ║ oliveyoung_crawler.py                                   ║
 # ╚══════════════════════════════════════════════════════════╝
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-import time, re, datetime, os
-import gspread
-from google.oauth2.service_account import Credentials
+import requests
+from bs4 import BeautifulSoup
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Referer": "https://www.oliveyoung.co.kr",
+}
+
+url = (
+    "https://www.oliveyoung.co.kr/store/main/getBestList.do"
+    "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
+)
+
+res = requests.get(url, headers=headers)
+soup = BeautifulSoup(res.text, "html.parser")
+cards = soup.select("ul.best_list > li")
+if not cards:
+    cards = soup.select("ul.cate_prd_list > li")
 
 # ══════════════════════════════════════════════════════
 # ▶ 설정값 — 로컬 / GitHub Actions 자동 분기
