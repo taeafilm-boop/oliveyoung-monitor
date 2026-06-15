@@ -60,6 +60,8 @@ options.add_argument("--disable-dev-shm-usage")
 options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
 options.add_argument("--disable-blink-features=AutomationControlled")
 options.add_experimental_option("excludeSwitches", ["enable-automation"])
+options.add_argument("--disable-gpu")          
+options.add_argument("--lang=ko-KR,ko;q=0.9")
 
 driver  = webdriver.Chrome(options=options)
 data    = []
@@ -78,7 +80,7 @@ try:
         "https://www.oliveyoung.co.kr/store/main/getBestList.do"
         "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
     )
-    time.sleep(10)
+    time.sleep(15)
 
     cards = []
     for sel in ["ul.best_list > li", "ul.cate_prd_list > li"]:
