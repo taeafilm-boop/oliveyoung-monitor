@@ -1,0 +1,37 @@
+name: 올리브영 베스트 TOP10
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 매일 KST 09:00 자동 실행
+  workflow_dispatch:        # 수동 실행 버튼도 활성화
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - uses: browser-actions/setup-chrome@latest
+
+      - name: 라이브러리 설치
+        run: pip install -r requirements.txt
+
+      - name: credentials.json 생성
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > credentials.json
+
+      - name: 크롤링 실행 (실패 시 3회 재시도)
+        run: |
+          for i in 1 2 3; do
+            python oliveyoung_to_gsheet.py && break
+            echo "재시도 $i..."
+            sleep 5
+          done
+        env:
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
