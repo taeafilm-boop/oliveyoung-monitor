@@ -32,7 +32,7 @@ jobs:
       - name: 크롤링 실행 (실패 시 3회 재시도)
         run: |
           for i in 1 2 3; do
-            python oliveyoung_to_gsheet.py && break
+            python oliveyoung_crawler.py && break
             echo "재시도 $i..."
             sleep 5
           done
