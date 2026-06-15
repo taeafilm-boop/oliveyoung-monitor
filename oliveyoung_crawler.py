@@ -78,7 +78,7 @@ try:
         "https://www.oliveyoung.co.kr/store/main/getBestList.do"
         "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
     )
-    time.sleep(6)
+    time.sleep(10)
 
     cards = []
     for sel in ["ul.best_list > li", "ul.cate_prd_list > li"]:
