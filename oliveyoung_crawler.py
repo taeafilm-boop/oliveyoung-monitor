@@ -1,52 +1,51 @@
 # ╔══════════════════════════════════════════════════════════╗
-# ║ 올리브영 전체 베스트 TOP10 → 전일 비교 → 구글시트 적재 ║
-# ║ oliveyoung_crawler.py                                   ║
+# ║ 올리브영 베스트 TOP10 크롤링 → 구글시트 적재 및 Gmail 초안 생성 ║
 # ╚══════════════════════════════════════════════════════════╝
 
-import re, datetime, os
+import re
+import datetime
+import time
+import os
 import gspread
+import imaplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from google.oauth2.service_account import Credentials
 from playwright.sync_api import sync_playwright
 from playwright_stealth import stealth_sync
 from bs4 import BeautifulSoup
 
+# ══════════════════════════════════════════════════════
+# ▶ 1. 설정값 (환경변수 및 이메일 계정)
+# ══════════════════════════════════════════════════════
+CREDENTIALS_FILE = os.environ.get("CREDENTIALS_FILE", r"C:\Users\11ST\Desktop\모니터링\credentials.json")
+SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "1nmLGooCid37AjWGglNVLIosG9Kxr8reTuAhAtyu7Jvw")
+WORKSHEET_NAME = "베스트TOP10"
 
-# ══════════════════════════════════════════════════════
-# ▶ 설정값 — 로컬 / GitHub Actions 자동 분기
-# ══════════════════════════════════════════════════════
-CREDENTIALS_FILE = os.environ.get(
-    "CREDENTIALS_FILE",
-    r"C:\Users\11ST\Desktop\모니터링\credentials.json"
-)
-SPREADSHEET_ID = os.environ.get(
-    "SPREADSHEET_ID",
-    "1nmLGooCid37AjWGglNVLIosG9Kxr8reTuAhAtyu7Jvw"
-)
-WORKSHEET_NAME   = "베스트TOP10"
+# Gmail 설정
+GMAIL_USER = "taeafilm@gmail.com"
+GMAIL_PASS = (os.environ.get("GMAIL_APP_PASSWORD") or os.environ.get("GMAIL_PASS") or "").replace(" ", "")
+TO_EMAIL = "7467@11stcorp.com"
+
 EXCLUDE_KEYWORDS = ["칩", "과자", "음료", "커피", "쿠키", "초코", "캔디", "젤리", "껌", "사탕"]
-
 BEST_URL = (
     "https://www.oliveyoung.co.kr/store/main/getBestList.do"
     "?dispCatNo=900000100100001&fltDispCatNo=&pageIdx=1&rowsPerPage=20"
 )
 
-
-# ══════════════════════════════════════════════════════
-# ▶ 유틸 함수
-# ══════════════════════════════════════════════════════
 def is_beauty(name):
     for kw in EXCLUDE_KEYWORDS:
         if kw in name:
             return False
     return True
 
-
 data = []
-now  = datetime.datetime.now()
-
+now = datetime.datetime.now()
+weekdays = ["월", "화", "수", "목", "금", "토", "일"]
+date_str = f"{now.year}년 {now.month:02d}월 {now.day:02d}일 ({weekdays[now.weekday()]})"
 
 # ══════════════════════════════════════════════════════
-# ▶ STEP 1 + 2: Playwright + stealth로 수집
+# ▶ 2. Playwright + stealth로 데이터 수집
 # ══════════════════════════════════════════════════════
 print("=" * 58)
 print("  STEP 1. 올리브영 전체 베스트 TOP10 수집 중...")
@@ -62,11 +61,11 @@ with sync_playwright() as p:
     page = context.new_page()
     stealth_sync(page)
 
-    # ── STEP 1: 랭킹 페이지 ──────────────────────────
+    # ── STEP 1: 랭킹 페이지 수집 ──────────────────────────
     page.goto(BEST_URL, wait_until="networkidle", timeout=30000)
     page.wait_for_timeout(5000)
-    html  = page.content()
-    soup  = BeautifulSoup(html, "html.parser")
+    html = page.content()
+    soup = BeautifulSoup(html, "html.parser")
     cards = soup.select("ul.best_list > li")
     if not cards:
         cards = soup.select("ul.cate_prd_list > li")
@@ -77,12 +76,11 @@ with sync_playwright() as p:
             break
 
         brand_el = card.select_one(".tx_brand")
-        name_el  = card.select_one(".tx_name")
+        name_el = card.select_one(".tx_name")
         brand = brand_el.text.strip() if brand_el else ""
-        name  = name_el.text.strip()  if name_el  else ""
+        name = name_el.text.strip() if name_el else ""
 
         if not name or not is_beauty(name):
-            print(f"  → 제외: {name[:20]}")
             continue
 
         org_el = card.select_one(".tx_org .tx_num")
@@ -97,11 +95,11 @@ with sync_playwright() as p:
 
         card_text = card.text
         promo_parts = []
-        if "1+1"      in card_text: promo_parts.append("1+1")
-        if "2+1"      in card_text: promo_parts.append("2+1")
-        if "증정"     in card_text: promo_parts.append("🎁")
+        if "1+1" in card_text: promo_parts.append("1+1")
+        if "2+1" in card_text: promo_parts.append("2+1")
+        if "증정" in card_text: promo_parts.append("🎁")
         if "오늘드림" in card_text: promo_parts.append("🚀")
-        if "쿠폰"     in card_text: promo_parts.append("🎟️")
+        if "쿠폰" in card_text: promo_parts.append("🎟️")
 
         a_tag = card.select_one("a.prd_thumb") or card.select_one("a")
         detail_url = a_tag["href"] if a_tag and a_tag.get("href") else ""
@@ -114,30 +112,21 @@ with sync_playwright() as p:
             "rate": rate_str, "reviews": "",
             "promo": " ".join(promo_parts), "url": detail_url,
         })
-        print(f"  {rank:>2}위 수집 | {brand} {name[:28]}")
         rank += 1
 
-    print(f"\n  → 총 {len(data)}개 기본 정보 수집 완료")
-
-    # ── STEP 2: 상세 페이지 — 리뷰수 추출 ───────────
+    # ── STEP 2: 상세 페이지 — 리뷰수 수집 ───────────
     print("\n" + "=" * 58)
     print("  STEP 2. 리뷰수 수집 중 (상품별 상세 페이지)")
     print("=" * 58)
 
     for row in data:
-        if not row["url"]:
-            continue
+        if not row["url"]: continue
         try:
             page.goto(row["url"], wait_until="networkidle", timeout=20000)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(2000)
 
             reviews = ""
-            for sel in [
-                ".review_count", ".prd_review strong",
-                "[class*='review'] strong", "[class*='review'] em",
-                ".review_num", "#reviewCount",
-                ".count_area em", ".goods_review .num",
-            ]:
+            for sel in [".review_count", ".prd_review strong", "[class*='review'] strong", ".review_num", "#reviewCount"]:
                 el = page.query_selector(sel)
                 if el:
                     t = re.sub(r"[^\d]", "", el.inner_text())
@@ -147,176 +136,216 @@ with sync_playwright() as p:
 
             if not reviews:
                 src = page.content()
-                for pat in [
-                    r'reviewCount["\s:]+(\d+)',
-                    r'"totalCount"\s*:\s*(\d+)',
-                    r'리뷰\s*[\(（](\d[\d,]+)',
-                ]:
+                for pat in [r'reviewCount["\s:]+(\d+)', r'"totalCount"\s*:\s*(\d+)', r'리뷰\s*[\(（](\d[\d,]+)']:
                     m = re.search(pat, src)
                     if m:
                         reviews = re.sub(r"[^\d]", "", m.group(1))
                         break
 
             row["reviews"] = reviews
-            rv_disp = f"{int(reviews):,}개" if reviews else "-"
-            print(f"  {row['rank']:>2}위 {row['brand']:<10} → 리뷰 {rv_disp}")
-
+            print(f"  {row['rank']:>2}위 {row['brand']:<10} 수집 완료")
         except Exception as e:
             print(f"  {row['rank']}위 리뷰 수집 오류: {e}")
 
     browser.close()
 
-
 # ══════════════════════════════════════════════════════
-# ▶ STEP 3: 전일 데이터 비교 분석
+# ▶ 3. 전일 데이터 비교 및 구글 시트 적재
 # ══════════════════════════════════════════════════════
-print("\n" + "=" * 58)
-print("  STEP 3. 전일 데이터 비교 분석 중...")
-print("=" * 58)
-
-
-def get_previous_data(gc):
-    try:
-        sh   = gc.open_by_key(SPREADSHEET_ID)
-        ws   = sh.worksheet(WORKSHEET_NAME)
-        rows = ws.get_all_records()
-        if not rows:
-            return {}
-        today_str = now.strftime("%Y-%m-%d")
-        dates = sorted(
-            set(r["수집일자"] for r in rows if r["수집일자"] != today_str),
-            reverse=True
-        )
-        if not dates:
-            print("  → 비교할 전일 데이터 없음 (첫 실행)")
-            return {}
-        prev_date = dates[0]
-        print(f"  → 전일 기준: {prev_date}")
-        lookup = {}
-        for r in rows:
-            if r["수집일자"] == prev_date:
-                key = f"{r['브랜드']}::{r['제품명']}"
-                lookup[key] = {
-                    "rank":     int(r["순위"]) if str(r["순위"]).isdigit() else 0,
-                    "discount": int(r["할인가"]) if str(r["할인가"]).isdigit() else 0,
-                    "reviews":  int(r["리뷰수"]) if str(r["리뷰수"]).isdigit() else 0,
-                    "promo":    r["프로모션"],
-                }
-        return lookup
-    except Exception as e:
-        print(f"  → 전일 데이터 로드 실패: {e}")
-        return {}
-
-
-def compare_with_previous(data, previous_lookup):
-    results = []
-    for r in data:
-        key = f"{r['brand']}::{r['name']}"
-        today_reviews  = int(r["reviews"]) if r["reviews"] else 0
-        today_discount = int(r["discount"]) if r["discount"] else 0
-
-        if key in previous_lookup:
-            prev = previous_lookup[key]
-            rank_change   = prev["rank"] - r["rank"]
-            review_inc    = today_reviews - prev["reviews"]
-            review_growth = round((review_inc / prev["reviews"]) * 100, 1) if prev["reviews"] > 0 else 0
-            price_change  = today_discount - prev["discount"]
-            is_new = False
-            events = []
-            if rank_change >= 3:   events.append(f"🔺 순위 {rank_change}단계 급상승")
-            elif rank_change <= -3: events.append(f"🔻 순위 {abs(rank_change)}단계 하락")
-            if review_inc >= 50:   events.append(f"💬 리뷰 +{review_inc}개 급증")
-            elif review_inc >= 20: events.append(f"💬 리뷰 +{review_inc}개 증가")
-            if prev["promo"] == "" and r["promo"] != "":
-                events.append(f"🎯 신규 프로모션 ({r['promo']})")
-            elif prev["promo"] != "" and r["promo"] == "":
-                events.append("📤 프로모션 종료")
-            if price_change < -1000: events.append(f"💸 가격 {abs(price_change):,}원 인하")
-            elif price_change > 1000: events.append(f"📈 가격 {price_change:,}원 인상")
-        else:
-            rank_change = review_inc = review_growth = price_change = None
-            is_new = True
-            events = ["🆕 신규 진입"]
-
-        results.append({
-            **r,
-            "rank_change": rank_change, "review_inc": review_inc,
-            "review_growth": review_growth, "price_change": price_change,
-            "is_new": is_new,
-            "events": " / ".join(events) if events else "-",
-        })
-    return results
-
-
-# ══════════════════════════════════════════════════════
-# ▶ STEP 4: 구글시트 연결 + 전일 비교 + 적재
-# ══════════════════════════════════════════════════════
-print("\n" + "=" * 58)
-print("  STEP 4. 구글시트 적재 중...")
-print("=" * 58)
+data_with_change = []
 
 try:
-    SCOPES = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
+    SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
-    gc    = gspread.authorize(creds)
-
-    previous_lookup  = get_previous_data(gc)
-    data_with_change = compare_with_previous(data, previous_lookup)
-
+    gc = gspread.authorize(creds)
     sh = gc.open_by_key(SPREADSHEET_ID)
+    
     try:
         ws = sh.worksheet(WORKSHEET_NAME)
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=WORKSHEET_NAME, rows=3000, cols=20)
 
-    if not ws.get_all_values():
-        ws.append_row([
-            "수집일자", "수집시간", "순위", "전일대비순위",
-            "브랜드", "제품명", "정가", "할인가", "할인율",
-            "리뷰수", "리뷰증감", "리뷰증감률(%)",
-            "가격변화", "프로모션", "이벤트", "신규여부", "URL"
-        ])
+    rows = ws.get_all_records()
+    today_str = now.strftime("%Y-%m-%d")
+    dates = sorted(set(r["수집일자"] for r in rows if r["수집일자"] != today_str), reverse=True)
+    
+    previous_lookup = {}
+    if dates:
+        prev_date = dates[0]
+        for r in rows:
+            if r["수집일자"] == prev_date:
+                key = f"{r['브랜드']}::{r['제품명']}"
+                previous_lookup[key] = {
+                    "rank": int(r["순위"]) if str(r["순위"]).isdigit() else 0,
+                    "discount": int(r["할인가"]) if str(r["할인가"]).isdigit() else 0,
+                    "reviews": int(r["리뷰수"]) if str(r["리뷰수"]).isdigit() else 0,
+                    "promo": r["프로모션"],
+                }
 
-    rows = [[
+    for r in data:
+        key = f"{r['brand']}::{r['name']}"
+        today_reviews = int(r["reviews"]) if r["reviews"] else 0
+        today_discount = int(r["discount"]) if r["discount"] else 0
+
+        if key in previous_lookup:
+            prev = previous_lookup[key]
+            rank_change = prev["rank"] - r["rank"]
+            review_inc = today_reviews - prev["reviews"]
+            review_growth = round((review_inc / prev["reviews"]) * 100, 1) if prev["reviews"] > 0 else 0
+            price_change = today_discount - prev["discount"]
+            is_new = False
+            events = []
+            
+            if rank_change >= 3: events.append(f"🔺순위 {rank_change}단계 급상승")
+            elif rank_change <= -3: events.append(f"🔻순위 {abs(rank_change)}단계 하락")
+            if review_inc >= 50: events.append(f"💬리뷰 +{review_inc}개 급증")
+            
+            if prev["promo"] == "" and r["promo"] != "": events.append(f"🎯신규 프로모션 ({r['promo']})")
+            if price_change < -1000: events.append(f"💸가격 {abs(price_change):,}원 인하")
+        else:
+            rank_change = review_inc = review_growth = price_change = None
+            is_new = True
+            events = ["🆕 신규 진입"]
+
+        data_with_change.append({
+            **r,
+            "rank_change": rank_change, "review_inc": review_inc,
+            "events": " / ".join(events) if events else "-"
+        })
+
+    # 시트 적재
+    sheet_rows = [[
         now.strftime("%Y-%m-%d"), now.strftime("%H:%M"),
-        r["rank"],
-        r["rank_change"] if r["rank_change"] is not None else "NEW",
-        r["brand"], r["name"],
-        int(r["original"]) if r["original"] else "",
-        int(r["discount"]) if r["discount"] else "",
-        r["rate"],
-        int(r["reviews"]) if r["reviews"] else "",
-        r["review_inc"]    if r["review_inc"]    is not None else "",
-        r["review_growth"] if r["review_growth"] is not None else "",
-        r["price_change"]  if r["price_change"]  is not None else "",
-        r["promo"], r["events"],
-        "Y" if r["is_new"] else "N",
-        r["url"],
+        r["rank"], r["rank_change"] if r["rank_change"] is not None else "NEW",
+        r["brand"], r["name"], int(r["original"]) if r["original"] else "",
+        int(r["discount"]) if r["discount"] else "", r["rate"],
+        int(r["reviews"]) if r["reviews"] else "", r["review_inc"] if r["review_inc"] is not None else "",
+        r["events"], r["url"],
     ] for r in data_with_change]
+    
+    ws.append_rows(sheet_rows, value_input_option="USER_ENTERED")
+    print("\n✅ 구글시트 적재 완료")
 
-    ws.append_rows(rows, value_input_option="USER_ENTERED")
-
-    print("\n  [전일 대비 변화 리포트]")
-    print(f"  {'순위':<4} {'변화':<8} {'브랜드':<10} {'제품명':<25} {'리뷰증감':<10} 이벤트")
-    print("  " + "-" * 80)
-    for r in data_with_change:
-        if r["rank_change"] is None:      rank_disp = "🆕NEW "
-        elif r["rank_change"] > 0:        rank_disp = f"🔺+{r['rank_change']:<4}"
-        elif r["rank_change"] < 0:        rank_disp = f"🔻{r['rank_change']:<5}"
-        else:                              rank_disp = "➡️ 유지"
-        rv_disp = f"+{r['review_inc']}개" if r["review_inc"] is not None else "-"
-        print(f"  {r['rank']:>2}위  {rank_disp} {r['brand']:<10} {r['name'][:24]:<25} {rv_disp:<10} {r['events']}")
-
-    print(f"\n  ✅ 구글시트 적재 완료! {len(rows)}행 추가")
-    print(f"  🔗 https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
-
-except FileNotFoundError:
-    print(f"  ❌ credentials.json 없음 → {CREDENTIALS_FILE} 확인")
-except gspread.exceptions.APIError as e:
-    print(f"  ❌ 구글 API 오류: {e}")
-    print("  → 서비스 계정 이메일이 시트에 편집자로 공유되어 있는지 확인")
 except Exception as e:
-    print(f"  ❌ 오류: {e}")
+    print(f"\n❌ 구글시트 연동 실패(메일 초안 생성은 계속 진행): {e}")
+    # 시트 실패 시 변화량 없이 현재 데이터만 전달
+    if not data_with_change:
+        for r in data:
+            data_with_change.append({**r, "rank_change": None, "review_inc": None, "events": "-"})
+
+# ══════════════════════════════════════════════════════
+# ▶ 4. HTML 리포트 생성 및 Gmail 임시보관함 저장
+# ══════════════════════════════════════════════════════
+print("\n" + "=" * 58)
+print("  STEP 4. 이메일 HTML 생성 및 임시보관함 저장 중...")
+print("=" * 58)
+
+cards_html = ""
+for idx, r in enumerate(data_with_change):
+    # 순위 뱃지 설정
+    if r["rank_change"] is None:
+        rank_badge = '<span style="color:#00C73C; font-weight:bold; font-size:12px;">🆕 NEW</span>'
+    elif r["rank_change"] > 0:
+        rank_badge = f'<span style="color:#FA2828; font-weight:bold; font-size:12px;">🔺 {r["rank_change"]}계단 상승</span>'
+    elif r["rank_change"] < 0:
+        rank_badge = f'<span style="color:#111111; font-weight:bold; font-size:12px;">🔻 {abs(r["rank_change"])}계단 하락</span>'
+    else:
+        rank_badge = '<span style="color:#999999; font-weight:bold; font-size:12px;">➖ 순위 유지</span>'
+
+    # 리뷰 증감 표시
+    rv_disp = f" (+{r['review_inc']})" if r["review_inc"] else ""
+    reviews_formatted = f"{int(r['reviews']):,}개" if r['reviews'] else "리뷰 없음"
+
+    # 이벤트 강조
+    event_html = ""
+    if r['events'] != "-":
+        event_html = f"""
+        <div style="background-color:#fff5f5; border-radius:6px; padding:10px 12px; font-size:12px; color:#FA2828; font-weight:700; margin-top:8px;">
+            🚨 모니터링 이벤트: {r['events']}
+        </div>
+        """
+
+    is_last = (idx == len(data_with_change) - 1)
+    border_style = "padding-bottom:15px;" if is_last else "padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid #eeeeee;"
+
+    cards_html += f"""
+        <div style="{border_style}">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="font-size:18px; font-weight:900; color:#111111;">{r['rank']}위 {rank_badge}</div>
+            <div style="font-size:12px; font-weight:700; color:#444444;">[{r['brand']}]</div>
+          </div>
+          <div style="font-size:15px; font-weight:700; color:#222222; margin-bottom:6px; line-height:1.4;">
+            <a href="{r['url']}" target="_blank" style="color:#222222; text-decoration:none;">{r['name']}</a>
+          </div>
+          <div style="font-size:13px; color:#666666; line-height:1.6;">
+            • 할인가: <b style="color:#FA2828;">{int(r['discount']):,}원</b> (정가 {int(r['original']):,}원 / {r['rate']} 할인) <br>
+            • 누적 리뷰: {reviews_formatted} <span style="color:#FA2828; font-weight:bold;">{rv_disp}</span> <br>
+            • 프로모션 현황: {r['promo'] if r['promo'] else '없음'}
+          </div>
+          {event_html}
+        </div>
+    """
+
+html_content = f"""
+<div style="background-color:#ffffff; padding:20px 10px; font-family:'Pretendard', '11STREET Gothic', -apple-system, sans-serif;">
+  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width:680px; margin:0 auto; background-color:#ffffff; border:1px solid #eaeaea; border-radius:12px; overflow:hidden;">
+    <tr>
+      <td align="center" style="background-color:#9BD728; padding:28px 20px; color:#ffffff;">
+        <div style="font-size:12px; font-weight:bold; letter-spacing:1px; opacity:0.9; margin-bottom:6px; color:#111;">COMPETITIVE MONITORING</div>
+        <h2 style="margin:0; font-size:23px; font-weight:800; line-height:1.3; letter-spacing:-0.5px; color:#111;">H&B 채널 뷰티 랭킹 실시간 리포트</h2>
+        <div style="font-size:13px; margin-top:8px; font-weight:600; opacity:0.95; color:#333;">{date_str} 기준 TOP 10</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:24px 20px; background-color:#ffffff;">
+        {cards_html}
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="background-color:#f9f9f9; padding:18px; font-size:12px; color:#999999; border-top:1px solid #eeeeee;">
+        본 리포트는 타겟 H&B 채널의 랭킹 및 리뷰 데이터를 Playwright를 통해 실시간 크롤링하여 자동 작성되었습니다.
+      </td>
+    </tr>
+  </table>
+</div>
+"""
+
+# 메일 메시지 구성
+msg = MIMEMultipart("alternative")
+msg["Subject"] = f"[실시간 모니터링] H&B 뷰티 랭킹 급상승 트렌드 리포트 ({now.month}/{now.day})"
+msg["From"] = GMAIL_USER
+msg["To"] = TO_EMAIL
+msg.attach(MIMEText(html_content, "html"))
+
+try:
+    if not GMAIL_PASS:
+        raise ValueError("GMAIL_APP_PASSWORD가 설정되지 않았습니다.")
+        
+    imap = imaplib.IMAP4_SSL("imap.gmail.com")
+    imap.login(GMAIL_USER, GMAIL_PASS)
+
+    draft_folder = None
+    typ, mailboxes = imap.list()
+    if typ == 'OK':
+        for mb in mailboxes:
+            if b'\\Drafts' in mb:
+                draft_folder = mb.split(b' "/" ')[-1].strip().decode('latin1').strip('"')
+                break
+
+    candidate_folders = [draft_folder, "[Gmail]/&x4TC3Lz0rQDVaA-", "[Gmail]/Drafts", "Drafts"]
+    success = False
+
+    for folder in candidate_folders:
+        if not folder: continue
+        status, _ = imap.append(folder, "\\Draft", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+        if status == 'OK':
+            print(f"✅ 성공: [{folder}] 폴더에 모니터링 리포트 초안이 정상 생성되었습니다.")
+            success = True
+            break
+
+    if not success:
+        print("❌ 임시보관함 폴더를 찾지 못해 초안 생성에 실패했습니다.")
+    imap.logout()
+
+except Exception as e:
+    print(f"❌ 메일 임시보관함 저장 중 오류 발생: {e}")
