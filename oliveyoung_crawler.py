@@ -57,8 +57,9 @@ try:
         stealth_sync(page)
 
         try:
-            page.goto(BEST_URL, wait_until="networkidle", timeout=45000)
-            page.wait_for_timeout(3000)
+            # 수정됨: networkidle -> domcontentloaded (페이지 뼈대만 로딩되면 바로 크롤링 시작)
+            page.goto(BEST_URL, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(4000) # 데이터가 화면에 뿌려질 수 있도록 강제로 4초 대기
         except Exception as e:
             print(f"⚠️ 메인 페이지 로딩 지연(Timeout): {e}")
             pass 
@@ -120,8 +121,9 @@ try:
         for row in data:
             if not row["url"]: continue
             try:
-                page.goto(row["url"], wait_until="networkidle", timeout=20000)
-                page.wait_for_timeout(2000)
+                # 수정됨: networkidle -> domcontentloaded
+                page.goto(row["url"], wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(2500)
 
                 reviews = ""
                 selectors = [
