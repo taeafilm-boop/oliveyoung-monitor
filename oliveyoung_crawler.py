@@ -1,11 +1,3 @@
-올려주신 스크린샷을 보니 누적 리뷰가 모두 "리뷰 없음"으로 나오고, 상품명이나 카드 하단에 랜딩 URL(바로가기 링크)이 빠져 있는 상태입니다.
-올리브영 상세 페이지의 HTML 구조가 변경되었거나 리뷰 데이터를 가져오는 셀렉터(CSS Selector)가 맞지 않아 리뷰 수를 빈 값으로 읽어오고 있고, HTML 카드 디자인 코드에서 url 변수를 화면에 렌더링하는 부분이 누락되어 그렇습니다.
-이 두 가지를 완벽하게 개선한 최종 파이썬 코드를 드립니다.
-기존 oliveyoung_crawler.py 내용을 전부 지우고 아래 코드로 통째로 교체해 주세요!
-💡 주요 개선 사항
- * 리뷰 수 수집 안정성 대폭 강화: 올리브영 상세 페이지 내에서 리뷰 숫자를 담고 있는 다양한 클래스 패턴과 자바스크립트 변수(totalCount, reviewCount)를 더 강력하게 탐색하도록 개선했습니다.
- * 랜딩 URL(상품 바로가기) 추가: 카드 하단에 "🔗 올리브영에서 상품 보기 >" 버튼 링크를 추가하여, 메일에서 클릭 한 번 바로 올리브영 상세 페이지로 이동할 수 있도록 수정했습니다.
-📄 전체 파이썬 코드 (oliveyoung_crawler.py)
 import re
 import datetime
 import time
@@ -24,14 +16,10 @@ except ImportError:
     def stealth_sync(page):
         pass
 
-# ══════════════════════════════════════════════════════
-# ▶ 1. 설정값 (환경변수 및 이메일 계정)
-# ══════════════════════════════════════════════════════
 CREDENTIALS_FILE = os.environ.get("CREDENTIALS_FILE", "credentials.json")
 SPREADSHEET_ID = "1nmLGooCid37AjWGglNVLIosG9Kxr8reTuAhAtyu7Jvw"
 WORKSHEET_NAME = "베스트TOP10"
 
-# Gmail 설정
 GMAIL_USER = "taeafilm@gmail.com"
 GMAIL_PASS = (os.environ.get("GMAIL_APP_PASSWORD") or os.environ.get("GMAIL_PASS") or "").replace(" ", "")
 TO_EMAIL = "7467@11stcorp.com"
@@ -53,9 +41,6 @@ now = datetime.datetime.now()
 weekdays = ["월", "화", "수", "목", "금", "토", "일"]
 date_str = f"{now.year}년 {now.month:02d}월 {now.day:02d}일 ({weekdays[now.weekday()]})"
 
-# ══════════════════════════════════════════════════════
-# ▶ 2. Playwright + stealth로 데이터 수집
-# ══════════════════════════════════════════════════════
 print("=" * 58)
 print("  STEP 1. 올리브영 전체 베스트 TOP10 수집 중...")
 print("=" * 58)
@@ -139,7 +124,6 @@ try:
                 page.wait_for_timeout(2000)
 
                 reviews = ""
-                # 💡 다양한 리뷰 수 셀렉터 및 탭 영역 탐색 강화
                 selectors = [
                     "#reviewInfo span", ".review_count", ".prd_review strong", 
                     "[class*='review'] strong", ".review_num", "#reviewCount",
@@ -153,7 +137,6 @@ try:
                             reviews = t
                             break
 
-                # 셀렉터로 못 찾을 경우 페이지 전체 소스에서 정규식으로 추출
                 if not reviews:
                     src = page.content()
                     patterns = [
@@ -184,9 +167,6 @@ if not data:
     print("⚠️ 수집된 데이터가 없어 리포트 생성을 종료합니다.")
     exit(0)
 
-# ══════════════════════════════════════════════════════
-# ▶ 3. 전일 데이터 비교 및 구글 시트 적재
-# ══════════════════════════════════════════════════════
 data_with_change = []
 
 try:
@@ -264,9 +244,6 @@ except Exception as e:
         for r in data:
             data_with_change.append({**r, "rank_change": None, "review_inc": None, "events": "-"})
 
-# ══════════════════════════════════════════════════════
-# ▶ 4. HTML 리포트 생성 및 Gmail 임시보관함 저장
-# ══════════════════════════════════════════════════════
 print("\n" + "=" * 58)
 print("  STEP 4. 이메일 HTML 생성 및 임시보관함 저장 중...")
 print("=" * 58)
@@ -296,7 +273,6 @@ for idx, r in enumerate(data_with_change):
     is_last = (idx == len(data_with_change) - 1)
     border_style = "padding-bottom:15px;" if is_last else "padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid #eeeeee;"
 
-    # 💡 랜딩 URL 버튼 추가 영역
     url_button_html = ""
     if r['url']:
         url_button_html = f"""
@@ -384,4 +360,3 @@ if not success:
     raise Exception("임시보관함 폴더를 찾지 못해 초안 생성에 실패했습니다.")
 
 imap.logout()
-
