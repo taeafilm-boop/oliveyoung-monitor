@@ -1,4 +1,4 @@
-Name: 올리브영 베스트 TOP10
+name: 올리브영 베스트 TOP10
 
 on:
   schedule:
@@ -40,6 +40,5 @@ jobs:
         env:
           CREDENTIALS_FILE: credentials.json
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-          # 💡 아래 두 줄을 반드시 추가해야 합니다!
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
