@@ -1,11 +1,3 @@
-이번에 두 가지 에러가 동시에 발생했습니다.
- * SPREADSHEET_ID 누락: 첫 줄 환경변수를 보면 SPREADSHEET_ID: 뒤가 텅 비어 있습니다. 아까 JSON 키를 재발급받으시면서 시크릿 이름이 꼬였거나 스프레드시트 ID 값을 지워버리신 것 같습니다.
- * TimeoutError (올리브영 접속 차단): 3번의 재시도 중 일부는 성공했지만, 마지막에는 올리브영 홈페이지 접속 자체에 30초 이상 걸리며 에러가 났습니다. (GitHub Actions 서버 IP가 잦은 접속 시도로 인해 올리브영 측에 일시 차단되었거나, 네트워크 지연이 발생한 것입니다.)
-이 두 가지 문제를 모두 해결하고 코드를 더 견고하게 다듬은 완성본 코드를 드립니다.
-💡 수정 포인트
- * SPREADSHEET_ID 값을 코드 내부에 직접 하드코딩하여, 깃허브 설정이 날아가도 안전하게 작동하도록 했습니다.
- * 올리브영 접속 시 Timeout(시간 초과)이 발생하면 프로그램을 강제 종료하지 않고, 유연하게 다음 단계로 넘어가거나 에러를 무시하도록 예외 처리(try-except)를 대폭 강화했습니다.
-이 코드로 전체 교체해 주세요!
 import re
 import datetime
 import time
@@ -28,7 +20,6 @@ except ImportError:
 # ▶ 1. 설정값 (환경변수 및 이메일 계정)
 # ══════════════════════════════════════════════════════
 CREDENTIALS_FILE = os.environ.get("CREDENTIALS_FILE", "credentials.json")
-# 💡 스프레드시트 ID 하드코딩 (환경변수 의존성 제거)
 SPREADSHEET_ID = "1nmLGooCid37AjWGglNVLIosG9Kxr8reTuAhAtyu7Jvw"
 WORKSHEET_NAME = "베스트TOP10"
 
@@ -55,7 +46,7 @@ weekdays = ["월", "화", "수", "목", "금", "토", "일"]
 date_str = f"{now.year}년 {now.month:02d}월 {now.day:02d}일 ({weekdays[now.weekday()]})"
 
 # ══════════════════════════════════════════════════════
-# ▶ 2. Playwright + stealth로 데이터 수집 (예외처리 강화)
+# ▶ 2. Playwright + stealth로 데이터 수집
 # ══════════════════════════════════════════════════════
 print("=" * 58)
 print("  STEP 1. 올리브영 전체 베스트 TOP10 수집 중...")
@@ -72,14 +63,11 @@ try:
         page = context.new_page()
         stealth_sync(page)
 
-        # ── STEP 1: 랭킹 페이지 수집 ──────────────────────────
         try:
-            # 💡 Timeout 시간을 늘리고 에러 발생 시 부드럽게 넘어가도록 처리
             page.goto(BEST_URL, wait_until="networkidle", timeout=45000)
             page.wait_for_timeout(3000)
         except Exception as e:
             print(f"⚠️ 메인 페이지 로딩 지연(Timeout): {e}")
-            # 에러가 나도 HTML 파싱 시도
             pass 
 
         html = page.content()
@@ -132,7 +120,6 @@ try:
             })
             rank += 1
 
-        # ── STEP 2: 상세 페이지 — 리뷰수 수집 ───────────
         print("\n" + "=" * 58)
         print("  STEP 2. 리뷰수 수집 중 (상품별 상세 페이지)")
         print("=" * 58)
@@ -140,7 +127,6 @@ try:
         for row in data:
             if not row["url"]: continue
             try:
-                # 💡 Timeout 발생 시 다음 상품으로 바로 넘어가도록 처리
                 page.goto(row["url"], wait_until="networkidle", timeout=15000)
                 page.wait_for_timeout(1500)
 
@@ -171,7 +157,6 @@ try:
 except Exception as e:
     print(f"❌ 크롤링 치명적 오류 발생: {e}")
 
-# 만약 데이터를 아예 가져오지 못했다면 빈 배열로 처리하여 HTML 생성을 스킵
 if not data:
     print("⚠️ 수집된 데이터가 없어 리포트 생성을 종료합니다.")
     exit(0)
@@ -240,7 +225,6 @@ try:
             "events": " / ".join(events) if events else "-"
         })
 
-    # 시트 적재
     sheet_rows = [[
         now.strftime("%Y-%m-%d"), now.strftime("%H:%M"),
         r["rank"], r["rank_change"] if r["rank_change"] is not None else "NEW",
@@ -333,7 +317,6 @@ html_content = f"""
 </div>
 """
 
-# 메일 메시지 구성 및 Gmail 임시보관함 주입
 msg = MIMEMultipart("alternative")
 msg["Subject"] = f"[실시간 모니터링] H&B 뷰티 랭킹 급상승 트렌드 리포트 ({now.month}/{now.day})"
 msg["From"] = GMAIL_USER
@@ -370,4 +353,3 @@ if not success:
     raise Exception("임시보관함 폴더를 찾지 못해 초안 생성에 실패했습니다.")
 
 imap.logout()
-
