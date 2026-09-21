@@ -58,7 +58,6 @@ try:
 
         try:
             page.goto(BEST_URL, wait_until="domcontentloaded", timeout=30000)
-            # 빈 뼈대 대신, 실제 '상품명'이 화면에 확실히 렌더링 될 때까지 대기
             page.wait_for_selector(".tx_name", timeout=15000)
             page.wait_for_timeout(2000)
         except Exception as e:
@@ -261,13 +260,13 @@ print("=" * 58)
 cards_html = ""
 for idx, r in enumerate(data_with_change):
     if r["rank_change"] is None:
-        rank_badge = '<span style="color:#00C73C; font-weight:bold; font-size:12px;">🆕 NEW</span>'
+        rank_badge = '<span style="color:#00C73C; font-weight:800; font-size:13px; margin-left:4px;">🆕 NEW</span>'
     elif r["rank_change"] > 0:
-        rank_badge = f'<span style="color:#FA2828; font-weight:bold; font-size:12px;">🔺 {r["rank_change"]}계단 상승</span>'
+        rank_badge = f'<span style="color:#FA2828; font-weight:800; font-size:13px; margin-left:4px;">🔺 {r["rank_change"]}계단 상승</span>'
     elif r["rank_change"] < 0:
-        rank_badge = f'<span style="color:#111111; font-weight:bold; font-size:12px;">🔻 {abs(r["rank_change"])}계단 하락</span>'
+        rank_badge = f'<span style="color:#111111; font-weight:800; font-size:13px; margin-left:4px;">🔻 {abs(r["rank_change"])}계단 하락</span>'
     else:
-        rank_badge = '<span style="color:#999999; font-weight:bold; font-size:12px;">➖ 순위 유지</span>'
+        rank_badge = '<span style="color:#999999; font-weight:800; font-size:13px; margin-left:4px;">➖ 순위 유지</span>'
 
     rv_disp = f" (+{r['review_inc']})" if r.get("review_inc") else ""
     reviews_formatted = f"{int(r['reviews']):,}개" if r.get('reviews') and str(r['reviews']).isdigit() else "리뷰 정보 없음"
@@ -275,19 +274,20 @@ for idx, r in enumerate(data_with_change):
     event_html = ""
     if r.get('events') and r['events'] != "-":
         event_html = f"""
-        <div style="background-color:#fff5f5; border-radius:6px; padding:10px 12px; font-size:12px; color:#FA2828; font-weight:700; margin-top:8px;">
+        <div style="background-color:#FFF5F5; border-radius:8px; padding:14px 16px; font-size:13px; color:#FA2828; font-weight:700; margin-top:12px; line-height:1.6; letter-spacing:-0.3px;">
             🚨 모니터링 이벤트: {r['events']}
         </div>
         """
 
     is_last = (idx == len(data_with_change) - 1)
-    border_style = "padding-bottom:15px;" if is_last else "padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid #eeeeee;"
+    # 간격(Padding/Margin) 확대
+    border_style = "padding-bottom:10px;" if is_last else "padding-bottom:30px; margin-bottom:30px; border-bottom:1px solid #E5E5E5;"
 
     url_button_html = ""
     if r.get('url'):
         url_button_html = f"""
-        <div style="margin-top:10px; text-align:right;">
-            <a href="{r['url']}" target="_blank" style="background-color:#9BD728; color:#111111; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold; text-decoration:none; display:inline-block;">🔗 올리브영에서 상품 보기 &gt;</a>
+        <div style="margin-top:16px; text-align:right;">
+            <a href="{r['url']}" target="_blank" style="background-color:#FA2828; color:#ffffff; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:800; text-decoration:none; display:inline-block; letter-spacing:-0.2px;">🔗 상품 상세보기 &gt;</a>
         </div>
         """
         
@@ -296,16 +296,16 @@ for idx, r in enumerate(data_with_change):
 
     cards_html += f"""
         <div style="{border_style}">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <div style="font-size:18px; font-weight:900; color:#111111;">{r['rank']}위 {rank_badge}</div>
-            <div style="font-size:12px; font-weight:700; color:#444444;">[{r['brand']}]</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <div style="font-size:22px; font-weight:900; color:#111111; letter-spacing:-0.5px;">{r['rank']}위 {rank_badge}</div>
+            <div style="font-size:13px; font-weight:800; color:#555555; background-color:#F4F4F4; padding:4px 10px; border-radius:4px; letter-spacing:-0.2px;">{r['brand']}</div>
           </div>
-          <div style="font-size:15px; font-weight:700; color:#222222; margin-bottom:6px; line-height:1.4;">
-            <a href="{r.get('url', '#')}" target="_blank" style="color:#222222; text-decoration:none;">{r['name']}</a>
+          <div style="font-size:17px; font-weight:800; color:#222222; margin-bottom:12px; line-height:1.45; letter-spacing:-0.5px;">
+            <a href="{r.get('url', '#')}" target="_blank" style="color:#111111; text-decoration:none;">{r['name']}</a>
           </div>
-          <div style="font-size:13px; color:#666666; line-height:1.6;">
-            • 할인가: <b style="color:#FA2828;">{disc_html}</b> {org_html} <br>
-            • 누적 리뷰: {reviews_formatted} <span style="color:#FA2828; font-weight:bold;">{rv_disp}</span> <br>
+          <div style="font-size:14px; color:#555555; line-height:1.75; letter-spacing:-0.2px;">
+            • 할인가: <b style="color:#FA2828; font-size:16px;">{disc_html}</b> <span style="font-size:13px; color:#999999;">{org_html}</span> <br>
+            • 누적 리뷰: <b style="color:#222222;">{reviews_formatted}</b> <span style="color:#FA2828; font-weight:800;">{rv_disp}</span> <br>
             • 프로모션 현황: {r.get('promo') if r.get('promo') else '없음'}
           </div>
           {event_html}
@@ -313,24 +313,25 @@ for idx, r in enumerate(data_with_change):
         </div>
     """
 
+# 전체 폰트 및 바깥쪽 여백 수정
 html_content = f"""
-<div style="background-color:#ffffff; padding:20px 10px; font-family:'Pretendard', '11STREET Gothic', -apple-system, sans-serif;">
-  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width:680px; margin:0 auto; background-color:#ffffff; border:1px solid #eaeaea; border-radius:12px; overflow:hidden;">
+<div style="background-color:#F7F8F9; padding:40px 10px; font-family:'11STREET Gothic', '11번가 고딕', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;">
+  <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width:720px; margin:0 auto; background-color:#ffffff; border:1px solid #DDDDDD; border-radius:16px; overflow:hidden;">
     <tr>
-      <td align="center" style="background-color:#9BD728; padding:28px 20px; color:#ffffff;">
-        <div style="font-size:12px; font-weight:bold; letter-spacing:1px; opacity:0.9; margin-bottom:6px; color:#111;">COMPETITIVE MONITORING</div>
-        <h2 style="margin:0; font-size:23px; font-weight:800; line-height:1.3; letter-spacing:-0.5px; color:#111;">H&B 채널 뷰티 랭킹 실시간 리포트</h2>
-        <div style="font-size:13px; margin-top:8px; font-weight:600; opacity:0.95; color:#333;">{date_str} 기준 TOP 10</div>
+      <td align="center" style="background-color:#111111; padding:35px 20px; color:#ffffff; border-top: 5px solid #FA2828;">
+        <div style="font-size:13px; font-weight:800; letter-spacing:1px; opacity:0.85; margin-bottom:8px; color:#9BD728;">COMPETITIVE MONITORING</div>
+        <h2 style="margin:0; font-size:26px; font-weight:900; line-height:1.35; letter-spacing:-0.5px; color:#ffffff;">H&B 채널 뷰티 랭킹 리포트</h2>
+        <div style="font-size:14px; margin-top:10px; font-weight:500; opacity:0.8; letter-spacing:-0.2px;">{date_str} 기준 TOP 10</div>
       </td>
     </tr>
     <tr>
-      <td style="padding:24px 20px; background-color:#ffffff;">
+      <td style="padding:40px 30px; background-color:#ffffff;">
         {cards_html}
       </td>
     </tr>
     <tr>
-      <td align="center" style="background-color:#f9f9f9; padding:18px; font-size:12px; color:#999999; border-top:1px solid #eeeeee;">
-        본 리포트는 타겟 H&B 채널의 랭킹 및 리뷰 데이터를 Playwright를 통해 실시간 크롤링하여 자동 작성되었습니다.
+      <td align="center" style="background-color:#F9F9F9; padding:25px; font-size:12px; color:#888888; border-top:1px solid #EEEEEE; line-height:1.6; letter-spacing:-0.3px;">
+        본 리포트는 11번가 뷰티 MD를 위해 타겟 H&B 채널의<br>랭킹 및 리뷰 데이터를 Playwright를 통해 실시간 자동 분석하여 작성됩니다.
       </td>
     </tr>
   </table>
