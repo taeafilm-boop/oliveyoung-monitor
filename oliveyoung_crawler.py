@@ -66,7 +66,6 @@ try:
                 if attempt > 0:
                     print(f"  🔄 데이터 렌더링 재시도 ({attempt+1}/3)...")
                 page.goto(BEST_URL, wait_until="domcontentloaded", timeout=30000)
-                # 실제 상품명 텍스트가 화면에 노출될 때까지 대기
                 page.wait_for_selector(".tx_name", timeout=12000)
                 page.wait_for_timeout(2000)
                 success_load = True
@@ -326,14 +325,15 @@ for idx, r in enumerate(data_with_change):
         </div>
     """
 
+# 💡 올리브영 시그니처 그린 배너 복구
 html_content = f"""
 <div style="background-color:#F7F8F9; padding:40px 10px; font-family:'11STREET Gothic', '11번가 고딕', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;">
   <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width:720px; margin:0 auto; background-color:#ffffff; border:1px solid #DDDDDD; border-radius:16px; overflow:hidden;">
     <tr>
-      <td align="center" style="background-color:#111111; padding:35px 20px; color:#ffffff; border-top: 5px solid #FA2828;">
-        <div style="font-size:13px; font-weight:800; letter-spacing:1px; opacity:0.85; margin-bottom:8px; color:#9BD728;">COMPETITIVE MONITORING</div>
-        <h2 style="margin:0; font-size:26px; font-weight:900; line-height:1.35; letter-spacing:-0.5px; color:#ffffff;">H&B 채널 뷰티 랭킹 리포트</h2>
-        <div style="font-size:14px; margin-top:10px; font-weight:500; opacity:0.8; letter-spacing:-0.2px;">{date_str} 기준 TOP 10</div>
+      <td align="center" style="background-color:#9BD728; padding:35px 20px; color:#111111;">
+        <div style="font-size:13px; font-weight:800; letter-spacing:1px; margin-bottom:8px; color:#333333;">COMPETITIVE MONITORING</div>
+        <h2 style="margin:0; font-size:26px; font-weight:900; line-height:1.35; letter-spacing:-0.5px; color:#111111;">H&B 채널 뷰티 랭킹 리포트</h2>
+        <div style="font-size:14px; margin-top:10px; font-weight:700; color:#333333; letter-spacing:-0.2px;">{date_str} 기준 TOP 10</div>
       </td>
     </tr>
     <tr>
