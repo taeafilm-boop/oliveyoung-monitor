@@ -52,17 +52,31 @@ try:
             viewport={"width": 1920, "height": 1080},
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
             locale="ko-KR",
+            extra_http_headers={
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": "https://www.oliveyoung.co.kr/store/main/main.do"
+            }
         )
         page = context.new_page()
         stealth_sync(page)
 
-        try:
-            page.goto(BEST_URL, wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_selector(".tx_name", timeout=15000)
-            page.wait_for_timeout(2000)
-        except Exception as e:
-            print(f"⚠️ 메인 페이지 로딩 지연 또는 봇 차단 발생: {e}")
-            pass 
+        success_load = False
+        for attempt in range(3):
+            try:
+                if attempt > 0:
+                    print(f"  🔄 데이터 렌더링 재시도 ({attempt+1}/3)...")
+                page.goto(BEST_URL, wait_until="domcontentloaded", timeout=30000)
+                # 실제 상품명 텍스트가 화면에 노출될 때까지 대기
+                page.wait_for_selector(".tx_name", timeout=12000)
+                page.wait_for_timeout(2000)
+                success_load = True
+                break
+            except Exception as e:
+                print(f"  ⚠️ {attempt+1}차 로딩 실패 (봇 차단 또는 지연): {e}")
+                page.wait_for_timeout(3000)
+
+        if not success_load:
+            print(f"🚨 최종 렌더링 실패. 현재 페이지 제목: {page.title()}")
 
         html = page.content()
         soup = BeautifulSoup(html, "html.parser")
@@ -280,7 +294,6 @@ for idx, r in enumerate(data_with_change):
         """
 
     is_last = (idx == len(data_with_change) - 1)
-    # 간격(Padding/Margin) 확대
     border_style = "padding-bottom:10px;" if is_last else "padding-bottom:30px; margin-bottom:30px; border-bottom:1px solid #E5E5E5;"
 
     url_button_html = ""
@@ -313,7 +326,6 @@ for idx, r in enumerate(data_with_change):
         </div>
     """
 
-# 전체 폰트 및 바깥쪽 여백 수정
 html_content = f"""
 <div style="background-color:#F7F8F9; padding:40px 10px; font-family:'11STREET Gothic', '11번가 고딕', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;">
   <table width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width:720px; margin:0 auto; background-color:#ffffff; border:1px solid #DDDDDD; border-radius:16px; overflow:hidden;">
