@@ -57,10 +57,12 @@ try:
         stealth_sync(page)
 
         try:
-            page.goto(BEST_URL, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(4000)
+            page.goto(BEST_URL, wait_until="domcontentloaded", timeout=30000)
+            # 빈 뼈대 대신, 실제 '상품명'이 화면에 확실히 렌더링 될 때까지 대기
+            page.wait_for_selector(".tx_name", timeout=15000)
+            page.wait_for_timeout(2000)
         except Exception as e:
-            print(f"⚠️ 메인 페이지 로딩 지연(Timeout): {e}")
+            print(f"⚠️ 메인 페이지 로딩 지연 또는 봇 차단 발생: {e}")
             pass 
 
         html = page.content()
@@ -121,8 +123,11 @@ try:
             if not row["url"]: continue
             try:
                 page.goto(row["url"], wait_until="domcontentloaded", timeout=20000)
-                page.wait_for_timeout(2500)
-
+                page.wait_for_selector("#reviewInfo span, .review_count", timeout=5000)
+            except Exception:
+                pass
+                
+            try:
                 reviews = ""
                 selectors = [
                     "#reviewInfo span", ".review_count", ".prd_review strong", 
@@ -226,7 +231,6 @@ try:
             "events": " / ".join(events) if events else "-"
         })
 
-    # 💡 시트 적재 시 빈 값 처리 보강
     sheet_rows = []
     for r in data_with_change:
         org_val = int(r["original"]) if r["original"] and str(r["original"]).isdigit() else ""
@@ -287,7 +291,6 @@ for idx, r in enumerate(data_with_change):
         </div>
         """
         
-    # 💡 HTML 렌더링 시 가격 빈 값 처리 보강
     disc_html = f"{int(r['discount']):,}원" if r.get('discount') and str(r['discount']).isdigit() else "표시 안됨"
     org_html = f"(정가 {int(r['original']):,}원 / {r['rate']} 할인)" if r.get('original') and str(r['original']).isdigit() else ""
 
