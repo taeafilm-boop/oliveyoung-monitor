@@ -57,9 +57,8 @@ try:
         stealth_sync(page)
 
         try:
-            # 수정됨: networkidle -> domcontentloaded (페이지 뼈대만 로딩되면 바로 크롤링 시작)
             page.goto(BEST_URL, wait_until="domcontentloaded", timeout=45000)
-            page.wait_for_timeout(4000) # 데이터가 화면에 뿌려질 수 있도록 강제로 4초 대기
+            page.wait_for_timeout(4000)
         except Exception as e:
             print(f"⚠️ 메인 페이지 로딩 지연(Timeout): {e}")
             pass 
@@ -121,7 +120,6 @@ try:
         for row in data:
             if not row["url"]: continue
             try:
-                # 수정됨: networkidle -> domcontentloaded
                 page.goto(row["url"], wait_until="domcontentloaded", timeout=20000)
                 page.wait_for_timeout(2500)
 
@@ -201,8 +199,8 @@ try:
 
     for r in data:
         key = f"{r['brand']}::{r['name']}"
-        today_reviews = int(r["reviews"]) if r["reviews"] and r["reviews"].isdigit() else 0
-        today_discount = int(r["discount"]) if r["discount"] else 0
+        today_reviews = int(r["reviews"]) if r["reviews"] and str(r["reviews"]).isdigit() else 0
+        today_discount = int(r["discount"]) if r["discount"] and str(r["discount"]).isdigit() else 0
 
         if key in previous_lookup:
             prev = previous_lookup[key]
@@ -228,14 +226,20 @@ try:
             "events": " / ".join(events) if events else "-"
         })
 
-    sheet_rows = [[
-        now.strftime("%Y-%m-%d"), now.strftime("%H:%M"),
-        r["rank"], r["rank_change"] if r["rank_change"] is not None else "NEW",
-        r["brand"], r["name"], int(r["original"]) if r["original"] else "",
-        int(r["discount"]) if r["discount"] else "", r["rate"],
-        int(r["reviews"]) if r["reviews"] and r["reviews"].isdigit() else "", r["review_inc"] if r["review_inc"] is not None else "",
-        r["events"], r["url"],
-    ] for r in data_with_change]
+    # 💡 시트 적재 시 빈 값 처리 보강
+    sheet_rows = []
+    for r in data_with_change:
+        org_val = int(r["original"]) if r["original"] and str(r["original"]).isdigit() else ""
+        disc_val = int(r["discount"]) if r["discount"] and str(r["discount"]).isdigit() else ""
+        rev_val = int(r["reviews"]) if r["reviews"] and str(r["reviews"]).isdigit() else ""
+        
+        sheet_rows.append([
+            now.strftime("%Y-%m-%d"), now.strftime("%H:%M"),
+            r["rank"], r["rank_change"] if r["rank_change"] is not None else "NEW",
+            r["brand"], r["name"], org_val, disc_val, r["rate"],
+            rev_val, r["review_inc"] if r["review_inc"] is not None else "",
+            r["events"], r["url"]
+        ])
     
     ws.append_rows(sheet_rows, value_input_option="USER_ENTERED")
     print("\n✅ 구글시트 적재 완료")
@@ -261,11 +265,11 @@ for idx, r in enumerate(data_with_change):
     else:
         rank_badge = '<span style="color:#999999; font-weight:bold; font-size:12px;">➖ 순위 유지</span>'
 
-    rv_disp = f" (+{r['review_inc']})" if r["review_inc"] and str(r["review_inc"]).isdigit() else ""
-    reviews_formatted = f"{int(r['reviews']):,}개" if r['reviews'] and str(r['reviews']).isdigit() else "리뷰 정보 없음"
+    rv_disp = f" (+{r['review_inc']})" if r.get("review_inc") else ""
+    reviews_formatted = f"{int(r['reviews']):,}개" if r.get('reviews') and str(r['reviews']).isdigit() else "리뷰 정보 없음"
 
     event_html = ""
-    if r['events'] != "-":
+    if r.get('events') and r['events'] != "-":
         event_html = f"""
         <div style="background-color:#fff5f5; border-radius:6px; padding:10px 12px; font-size:12px; color:#FA2828; font-weight:700; margin-top:8px;">
             🚨 모니터링 이벤트: {r['events']}
@@ -276,12 +280,16 @@ for idx, r in enumerate(data_with_change):
     border_style = "padding-bottom:15px;" if is_last else "padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid #eeeeee;"
 
     url_button_html = ""
-    if r['url']:
+    if r.get('url'):
         url_button_html = f"""
         <div style="margin-top:10px; text-align:right;">
             <a href="{r['url']}" target="_blank" style="background-color:#9BD728; color:#111111; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:bold; text-decoration:none; display:inline-block;">🔗 올리브영에서 상품 보기 &gt;</a>
         </div>
         """
+        
+    # 💡 HTML 렌더링 시 가격 빈 값 처리 보강
+    disc_html = f"{int(r['discount']):,}원" if r.get('discount') and str(r['discount']).isdigit() else "표시 안됨"
+    org_html = f"(정가 {int(r['original']):,}원 / {r['rate']} 할인)" if r.get('original') and str(r['original']).isdigit() else ""
 
     cards_html += f"""
         <div style="{border_style}">
@@ -290,12 +298,12 @@ for idx, r in enumerate(data_with_change):
             <div style="font-size:12px; font-weight:700; color:#444444;">[{r['brand']}]</div>
           </div>
           <div style="font-size:15px; font-weight:700; color:#222222; margin-bottom:6px; line-height:1.4;">
-            <a href="{r['url']}" target="_blank" style="color:#222222; text-decoration:none;">{r['name']}</a>
+            <a href="{r.get('url', '#')}" target="_blank" style="color:#222222; text-decoration:none;">{r['name']}</a>
           </div>
           <div style="font-size:13px; color:#666666; line-height:1.6;">
-            • 할인가: <b style="color:#FA2828;">{int(r['discount']):,}원</b> (정가 {int(r['original']):,}원 / {r['rate']} 할인) <br>
+            • 할인가: <b style="color:#FA2828;">{disc_html}</b> {org_html} <br>
             • 누적 리뷰: {reviews_formatted} <span style="color:#FA2828; font-weight:bold;">{rv_disp}</span> <br>
-            • 프로모션 현황: {r['promo'] if r['promo'] else '없음'}
+            • 프로모션 현황: {r.get('promo') if r.get('promo') else '없음'}
           </div>
           {event_html}
           {url_button_html}
